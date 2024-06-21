@@ -490,7 +490,7 @@ impl LookupLimit {
 
     #[inline(always)]
     fn can_lookup(&mut self) -> bool {
-        if self.num_lookups < 10 && self.timer.elapsed().as_secs() < 20 {
+        if self.num_lookups <= 10 && self.timer.elapsed().as_secs() < 20 {
             self.num_lookups += 1;
             true
         } else {
