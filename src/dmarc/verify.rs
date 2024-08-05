@@ -10,6 +10,8 @@
 
 use std::sync::Arc;
 
+use publicsuffix::Psl;
+
 use crate::{
     AuthenticatedMessage, DkimOutput, DkimResult, DmarcOutput, DmarcResult, Error, Resolver,
     SpfOutput, SpfResult,
@@ -68,12 +70,14 @@ impl Resolver {
         if spf_output.result == SpfResult::Pass || has_dkim_pass {
             // Check SPF alignment
             let from_subdomain = format!(".{from_domain}");
+            let from_organization_domain = self.psl.domain(&from_domain.as_bytes());
             if spf_output.result == SpfResult::Pass {
+                let mail_from_organization_domain =
+                    self.psl.domain(&mail_from_domain.as_bytes());
                 output.spf_result = if mail_from_domain == from_domain {
                     DmarcResult::Pass
                 } else if dmarc.aspf == Alignment::Relaxed
-                    && mail_from_domain.ends_with(&from_subdomain)
-                    || from_domain.ends_with(&format!(".{mail_from_domain}"))
+                    && mail_from_organization_domain == from_organization_domain
                 {
                     output.policy = dmarc.sp;
                     DmarcResult::Pass
@@ -90,10 +94,11 @@ impl Resolver {
                     DmarcResult::Pass
                 } else if dmarc.adkim == Alignment::Relaxed
                     && dkim_output.iter().any(|o| {
+                        let dkim_organization_domain = self
+                            .psl
+                            .domain(o.signature.as_ref().unwrap().d.as_bytes());
                         o.result == DkimResult::Pass
-                            && (o.signature.as_ref().unwrap().d.ends_with(&from_subdomain)
-                                || from_domain
-                                    .ends_with(&format!(".{}", o.signature.as_ref().unwrap().d)))
+                            && dkim_organization_domain == from_organization_domain
                     })
                 {
                     output.policy = dmarc.sp;
@@ -290,6 +295,22 @@ mod test {
                 "From: hello@a.b.c.example.org\r\n\r\n",
                 "example.org",
                 "example.org",
+                DkimResult::Pass,
+                SpfResult::Pass,
+                DmarcResult::Pass,
+                DmarcResult::Pass,
+                Policy::Quarantine,
+            ),
+            // Relaxed - Pass with tree walk and different subdomains
+            (
+                "_dmarc.c.example.org.",
+                concat!(
+                    "v=DMARC1; p=reject; sp=quarantine; np=None; aspf=r; adkim=r; fo=1;",
+                    "rua=mailto:dmarc-feedback@example.org"
+                ),
+                "From: hello@a.b.c.example.org\r\n\r\n",
+                "z.example.org",
+                "z.example.org",
                 DkimResult::Pass,
                 SpfResult::Pass,
                 DmarcResult::Pass,

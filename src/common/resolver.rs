@@ -10,7 +10,9 @@
 
 use std::{
     borrow::Cow,
+    fs,
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
+    path::Path,
     sync::Arc,
 };
 
@@ -21,6 +23,7 @@ use hickory_resolver::{
     system_conf::read_system_conf,
     AsyncResolver, Name,
 };
+use publicsuffix::List;
 
 use crate::{
     dkim::{Atps, DomainKeyReport},
@@ -78,6 +81,7 @@ impl Resolver {
             cache_ipv4: LruCache::with_capacity(capacity),
             cache_ipv6: LruCache::with_capacity(capacity),
             cache_ptr: LruCache::with_capacity(capacity),
+            psl: Self::read_psl("./public_suffix_list.dat"),
         })
     }
 
@@ -97,7 +101,33 @@ impl Resolver {
             cache_ipv4: LruCache::with_capacity(ipv4_capacity),
             cache_ipv6: LruCache::with_capacity(ipv6_capacity),
             cache_ptr: LruCache::with_capacity(ptr_capacity),
+            psl: Self::read_psl("./public_suffix_list.dat"),
         })
+    }
+
+    pub fn with_capacity_and_psl(
+        config: ResolverConfig,
+        options: ResolverOpts,
+        capacity: usize,
+        psl_path: &str,
+    ) -> Result<Self, ResolveError> {
+        Ok(Self {
+            resolver: AsyncResolver::tokio(config, options),
+            cache_txt: LruCache::with_capacity(capacity),
+            cache_mx: LruCache::with_capacity(capacity),
+            cache_ipv4: LruCache::with_capacity(capacity),
+            cache_ipv6: LruCache::with_capacity(capacity),
+            cache_ptr: LruCache::with_capacity(capacity),
+            psl: Self::read_psl(psl_path),
+        })
+    }
+
+    fn read_psl(path: &str) -> List {
+        let file_path = Path::new(path);
+        let contents = fs::read_to_string(file_path).expect("Failed to read file");
+
+        let list: List = contents.parse().unwrap();
+        return list;
     }
 
     pub async fn txt_raw_lookup(&self, key: impl IntoFqdn<'_>) -> crate::Result<Vec<u8>> {

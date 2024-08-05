@@ -276,6 +276,7 @@ use hickory_resolver::{
 };
 use mta_sts::{MtaSts, TlsRpt};
 use parking_lot::Mutex;
+use publicsuffix::List;
 use spf::{Macro, Spf};
 
 pub mod arc;
@@ -297,6 +298,7 @@ pub struct Resolver {
     pub(crate) cache_ipv4: LruCache<String, Arc<Vec<Ipv4Addr>>>,
     pub(crate) cache_ipv6: LruCache<String, Arc<Vec<Ipv6Addr>>>,
     pub(crate) cache_ptr: LruCache<IpAddr, Arc<Vec<String>>>,
+    pub(crate) psl: List
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -634,6 +636,7 @@ impl Clone for Resolver {
             cache_ipv4: Mutex::new(self.cache_ipv4.lock().clone()),
             cache_ipv6: Mutex::new(self.cache_ipv6.lock().clone()),
             cache_ptr: Mutex::new(self.cache_ptr.lock().clone()),
+            psl: self.psl.clone(),
         }
     }
 }
